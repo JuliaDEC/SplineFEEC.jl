@@ -1,0 +1,13 @@
+name = "SplineFEEC"
+uuid = "b59f31f5-7a30-4b11-af7f-c518877cddcf"
+authors = ["JuliaDEC"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

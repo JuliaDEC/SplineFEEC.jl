@@ -17,6 +17,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 [compat]
 DomainSets = "0.4"
 FFTW = "1.2"
+Kronecker = "0.4"
 Plots = "1.7, 1.8"
 julia = "1"
 

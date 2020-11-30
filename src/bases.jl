@@ -14,7 +14,9 @@ struct BSplineBasis{T} <: Basis where {T}
 end
 
 getindex(B::BSplineBasis{T}, x::Real, j::Integer) where T = B.B[j](x)
+getindex(B::BSplineBasis{T}, x::Real, j::Colon) where T = [B.B[i](x) for i in 1:length(B.B)]
 getindex(B::BSplineBasis{T}, x::AbstractVector, j::Integer) where T = B.B[j].(x)
+getindex(B::BSplineBasis{T}, x::AbstractVector, j::Colon) where T = [B.B[i](x[j]) for j in 1:length(x), i in 1:length(B.B)]
 
 # Calculate the Spline Basis of order k
 # For the Splines, we use CompactBases.jl. For the future, we should write our own libary with a better interface. 
@@ -38,9 +40,13 @@ function PeriodicBSpline(interval::AbstractInterval, k::Int, N::Int)
         push!(basis_fct, x -> B[x, i])
     end
 
+    # In order to have the same ordering as in theory
+    basis_fct = circshift(basis_fct, -1)
+
     return BSplineBasis{periodic}(SVector(basis_fct...), t_, interval, k, N)
 end
 
+# For the second derivative, the last basis functions has problems with the BC
 function derivative(basis::BSplineBasis{periodic})
     k = basis.k-1
     t_d = ArbitraryKnotSet(k, basis.t)

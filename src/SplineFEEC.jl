@@ -14,7 +14,9 @@ using FFTW
 using Plots
 
 # For now only export the non internal operators
-export (..), ×, ⊗
+export (..), ×, ⊗, ⊙,
+        PeriodicBSpline, adjoint, PeriodicBSplineTensorProductBasis,
+        der_mat, mass_matrix
 
 include("bases.jl")
 include("circulant.jl")

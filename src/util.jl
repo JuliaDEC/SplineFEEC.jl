@@ -23,6 +23,30 @@ function mass_matrix(basis::Basis)
     return  M
 end
 
+# Todo more precisely
+function mass_matrix(basis1::Basis, basis2::Basis)
+    x, w = gausslobatto(basis1.k + 1)
+    a = basis1.interval.left
+    b = basis1.interval.right
+    N = length(basis1.B)
+    Δx = (b-a)/N
+
+    M = zeros(N, N)
+    # Do Quadrature over every element -> exact
+    for el in 1:N
+        b = a + Δx
+        xx = a .+ (b - a) .*(x .+ 1) ./ 2
+        for i in 1:N
+            for j in 1:N
+                M[i, j] += 2/(b - a) .* dot(basis1[xx, i] .* basis2[xx, j], w)
+            end
+        end
+        a = b
+    end
+
+    return  M
+end
+
 # For the stiffness_matrix of basis b, call stiffness_matrix(b')
 # Or should we take b as an input? 
 # Care for the factor in the integral, the derived basis functions, i.e. b', have already 2/Δx as an factor!
@@ -193,7 +217,7 @@ function L2_prod(f::Function, basis::BSplineTensorProductBasis{2, T}) where T
                     for el_y in 1:N2
                         b2 = a2 + Δx2
                         xx2 = a2 .+ (b2 - a2) .*(x2 .+ 1) ./ 2
-                        
+
                         val += 2/(b2 - a2) .* dot(Y[xx2, j] .* f.(xx1[xn], xx2), w2)
 
                         a2 = b2
@@ -326,7 +350,7 @@ function col_mat(basis::TensorProductBasis{2}, mm::Int)
 end
 
 function col_mat(basis::BSplineTensorProductBasis{3, T}, mm::Int) where T
-    X,Y, Z = basis.B
+    X, Y, Z = basis.B
     N = (length(X.B), length(Y.B), length(Z.B))
 
     x = range(X.interval.left, X.interval.right, length = mm)
@@ -352,4 +376,49 @@ function col_mat(basis::BSplineTensorProductBasis{3, T}, mm::Int) where T
 
     return xyz, M1 ⊗ M2 ⊗ M3
 
+end
+
+function L2_prod(f::Function, basis::SArray{Tuple{3}, BSplineTensorProductBasis{3, T}}) where {T}
+    fh = []
+
+    for i in 1:3
+        push!(fh, L2_prod((x,y,z) -> f(x,y,z)[i], basis[i]))
+    end
+
+    return SVector(fh...)
+end
+
+function L2_proj(f::Function, basis::SArray{Tuple{3}, BSplineTensorProductBasis{3, T}}) where {T}
+    fh = []
+    M = mass_matrix.(basis)
+
+    for i in 1:3
+        push!(fh, M[i]\L2_prod((x,y,z) -> f(x,y,z)[i], basis[i]))
+    end
+
+    return SVector(fh...)
+end
+
+function L2_proj(f::Function, basis::BSplineTensorProductBasis{3, T}) where {T}
+    M = mass_matrix(basis)
+    
+    fh = M\L2_prod((x,y,z) -> f(x,y,z), basis)
+    return SVector{length(fh)}(fh)
+end
+
+function L2_proj(f::Function, basis::SArray{Tuple{2}, BSplineTensorProductBasis{2, T}}) where {T}
+    fh = []
+    M = mass_matrix.(basis)
+
+    for i in 1:2
+        push!(fh, M[i]\L2_prod((x,y) -> f(x,y)[i], basis[i]))
+    end
+
+    return SVector(fh...)
+end
+
+function L2_proj(f::Function, basis::BSplineTensorProductBasis{2, T}) where {T}
+    M = mass_matrix(basis)
+    fh = M\L2_prod((x,y) -> f(x,y), basis)
+    return SVector{length(fh)}(fh)
 end

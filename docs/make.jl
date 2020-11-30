@@ -13,10 +13,13 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Basis" => "bases.md",
+        "Operator" => "operator.md",
+        "Examples" => "examples.md",
     ],
 )
 
 deploydocs(;
     repo="github.com/JuliaDEC/SplineFEEC.jl",
-        devbranch = "main",
+    devbranch = "documentation",
 )

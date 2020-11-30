@@ -1,6 +1,6 @@
 ## Operator
 
-### Differentialoperator
+## Differentialoperator
 
 
-### Projections
+## Projections

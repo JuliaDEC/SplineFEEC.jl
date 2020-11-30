@@ -16,6 +16,7 @@ makedocs(;
         "Basis" => "bases.md",
         "Operator" => "operator.md",
         "Examples" => "examples.md",
+        "Library" => "library.md",
     ],
 )
 

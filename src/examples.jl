@@ -13,7 +13,6 @@ function test_derivative(k::Int, N::Int)
     fh = M \ (f ⊙ basis)
     dfh = M_d \ (df ⊙ basis')
 
-    # Shouldn't be the following numerically exact? -> care for integral f ⊙ basis 
     @show D * fh ≈ dfh
     @show maximum(abs.( D * fh - dfh))
     
@@ -152,7 +151,6 @@ function Maxwells_2d()
 end
 
 function Maxwells_3d()
-    
     domain = (0..1) × (0..1) × (0..1) 
     k = (4, 5, 3)
     N = (7, 8, 6)

@@ -5,22 +5,12 @@ abstract type Basis end
 
 abstract type periodic end # What is the super type, BC?
 
-"""
-    BSplineBasis{T}(basis_functions, knot_vector, interval, order, N)
-
-    BSpline basis on `interval` with `N` points and order `k`. Where `T` describes the boundary condition.
-"""
 struct BSplineBasis{T} <: Basis where {T}
     B #::BT need to define proper type, contains the basis functions
     t::AbstractVector # the knotvector
     interval::AbstractInterval # domain
     k::Int # order
     N::Int # also equal to length(B), do we need this?, amount of elements
-end
-
-function Base.show(io::IO, B::BSplineBasis{T}) where {T}
-    println(io, T, " BSpline basis of order ", B.k, " on interval ", B.interval, " with ", B.N, " nodes.")
-    nothing
 end
 
 getindex(B::BSplineBasis{T}, x::Real, j::Integer) where T = B.B[j](x)
@@ -30,11 +20,6 @@ getindex(B::BSplineBasis{T}, x::AbstractVector, j::Colon) where T = [B.B[i](x[j]
 
 # Calculate the Spline Basis of order k
 # For the Splines, we use CompactBases.jl. For the future, we should write our own libary with a better interface. 
-"""
-    PeriodicBSpline(basis_functions, knot_vector, interval, order, N)
-
-    Construct a `periodic` BSpline basis on `interval` with `N` points and order `k`.
-"""
 function PeriodicBSpline(interval::AbstractInterval, k::Int, N::Int)
     a = interval.left
     b = interval.right
@@ -85,16 +70,10 @@ function derivative(basis::BSplineBasis{periodic})
     return BSplineBasis{periodic}(SVector(basis_fct...), basis.t, interval, k, N)
 end
 
-"""
-    adjoint(b::Basis)
-
-    Create a basis that consits of the derivative of basis functions in `b`.
-"""
 function adjoint(basis::Basis)
     return derivative(basis)
 end
 
-# we can delete this later on
 function plot(basis::Basis)
     a = basis.interval.left
     b = basis.interval.right
@@ -111,27 +90,8 @@ end
 abstract type TensorProductBasis{N} end
 
 # Just collect the 1-D bases as a tuple
-"""
-    BSplineTensorProductBasis{N,T}(Bases::SArray)
-
-    BSpline basis on a tensor-product domain, consisting of a vector of one-dimensional bases defined on each direction of the tensor-product domain.
-    Where `N` describes the dimension and `T` the boundary condition.
-"""
 struct BSplineTensorProductBasis{N, T} <: TensorProductBasis{N}
     B::SArray{Tuple{N}, BSplineBasis{T}}
-end
-
-function Base.show(io::IO, B::BSplineTensorProductBasis{N,T}) where {N,T}
-    domain = B[1].interval
-    for i in 2:N
-        domain = domain × B[i].interval
-    end
-
-    println(io, T, " BSpline basis on tensor-product domain ", domain, ", consisting of: ")
-    for i in 1:N
-        show(io::IO, B.B[i])
-    end
-    nothing
 end
 
 getindex(B::BSplineTensorProductBasis{N, T}, j::Integer) where {N, T} = B.B[j]

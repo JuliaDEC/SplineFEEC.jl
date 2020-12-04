@@ -1,10 +1,5 @@
 # Name util.jl is a bit weird. Maybe something like metric.jl is better, since we mainly calculate integrals here.
 # 1-D Calculations
-"""
-    mass_matrix(b::Basis)
-
-    Calculate the mass-matrix for the basis `b` with Gauss quadrature. 
-"""
 function mass_matrix(basis::Basis)
     x, w = gausslobatto(basis.k + 1)
     a = basis.interval.left
@@ -55,11 +50,6 @@ end
 # For the stiffness_matrix of basis b, call stiffness_matrix(b')
 # Or should we take b as an input? 
 # Care for the factor in the integral, the derived basis functions, i.e. b', have already 2/Δx as an factor!
-"""
-    stiffness_matrix(b'::Basis)
-
-    Calculate the stiffnes-matrix for the basis `b` with Gauss quadrature. Caution: We directly input b' here as a basis. 
-"""
 function stiffness_matrix(basis::Basis)
     x, w = gausslobatto(basis.k + 1)
     a = basis.interval.left
@@ -160,7 +150,6 @@ function L2_prod(f::Function, basis::Basis)
     return fh
 end
 
-#maybe find a better name
 function col_mat(basis::Basis, m::Int)
     n = length(basis.B)
     x = range(basis.interval.left, basis.interval.right, length = m)
@@ -413,7 +402,7 @@ end
 function L2_proj(f::Function, basis::BSplineTensorProductBasis{3, T}) where {T}
     M = mass_matrix(basis)
     
-    fh = M\L2_prod(f, basis)
+    fh = M\L2_prod((x,y,z) -> f(x,y,z), basis)
     return SVector{length(fh)}(fh)
 end
 
@@ -430,12 +419,6 @@ end
 
 function L2_proj(f::Function, basis::BSplineTensorProductBasis{2, T}) where {T}
     M = mass_matrix(basis)
-    fh = M\L2_prod(f, basis)
-    return SVector{length(fh)}(fh)
-end
-
-function L2_proj(f::Function, basis::BSplineBasis{T}) where {T}
-    M = mass_matrix(basis)
-    fh = M\L2_prod(f, basis)
+    fh = M\L2_prod((x,y) -> f(x,y), basis)
     return SVector{length(fh)}(fh)
 end

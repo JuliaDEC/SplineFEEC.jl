@@ -33,6 +33,9 @@ struct d_basis{D, T <: Union{Basis, TensorProductBasis}}
     basis::T
 end
 
+function grad(basis::Union{Basis, TensorProductBasis})
+    return d_basis{grad, typeof(basis)}(basis)
+end
 function ∇(basis::Union{Basis, TensorProductBasis})
     return d_basis{grad, typeof(basis)}(basis)
 end
@@ -100,24 +103,16 @@ struct discrete_differential{T, N}
 end
 
 function disc_grad(N)
-    return disc_diff(gradient, N)
+    return discrete_diff(gradient, N)
 end
 
 function disc_curl(N)
-    return disc_diff(curl, N)
+    return discrete_diff(curl, N)
 end
 
 function disc_div(N)
-    return disc_diff(div, N)
+    return discrete_diff(div, N)
 end
-
-#1D case
-function disc_diff(T, N::Int)
-    D = der_mat(N)
-
-    return D
-end
-
 
 #2D case
 #here we only have gradient and curl in the primal diagram, curl and div in the dual diagram, which we write similarly
@@ -173,7 +168,7 @@ function *(C::discrete_differential{curl, 3}, fh::SArray{Tuple{3}})
 end
 
 function *(C::discrete_differential{div, 3}, fh::SArray{Tuple{3}})
-    return SVector{length(fh[1])}(C.D[1] * fh[1] + C.D[2] * fh[2] + C.D[3] * fh[3])
+    return SVector(C.D[1] * fh[1] + C.D[2] * fh[2] + C.D[3] * fh[3])
 end
 
 function matrix(C::discrete_differential{gradient, 3})

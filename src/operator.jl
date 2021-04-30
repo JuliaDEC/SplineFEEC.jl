@@ -1,4 +1,4 @@
-### L2
+### L2 - obsolete
 function L2_prod(basis::Union{Basis, TensorProductBasis})
     return mass_matrix(basis)
 end
@@ -33,9 +33,6 @@ struct d_basis{D, T <: Union{Basis, TensorProductBasis}}
     basis::T
 end
 
-function grad(basis::Union{Basis, TensorProductBasis})
-    return d_basis{grad, typeof(basis)}(basis)
-end
 function ∇(basis::Union{Basis, TensorProductBasis})
     return d_basis{grad, typeof(basis)}(basis)
 end
@@ -44,7 +41,8 @@ function L2_prod(gbasis::d_basis{grad, T}) where T <: Basis
     return stiffness_matrix(derivative(gbasis.basis))
 end
 
-function L2_prod(gbasis::d_basis{grad, T}) where T <: TensorProductBasis{N} where N
+# Needed for poisson problem
+function L2_prod(gbasis::d_basis{grad, BSplineTensorProductBasis{N, periodic}}) where N  
     components = []
     basis = gbasis.basis
     for j in 1:N
@@ -55,6 +53,34 @@ function L2_prod(gbasis::d_basis{grad, T}) where T <: TensorProductBasis{N} wher
                 push!(matrices, stiffness_matrix(b))
             else
                 push!(matrices, mass_matrix(basis[i]))
+            end
+        end
+
+        comp = ⊗(matrices...)
+        push!(components, comp)
+    end
+
+    return sum(components)
+end
+
+function L2_prod(gbasis::d_basis{grad, BSplineTensorProductBasis{N, dirichlet}}) where N
+    components = []
+    basis = gbasis.basis
+    ϵ = 1e-14
+    for j in 1:N
+        matrices = []
+        for i in 1:N
+            if i == j
+                b = derivative(basis[i])
+                sm = stiffness_matrix(b)
+                sm[1,1] *= (1 +1/ϵ) 
+                sm[end, end] *= (1 +1/ϵ) 
+                push!(matrices, sm)
+            else
+                mm = mass_matrix(basis[i])
+                mm[1,1] *= (1 +1/ϵ) 
+                mm[end, end] *= (1 +1/ϵ) 
+                push!(matrices, mm)
             end
         end
 
@@ -82,18 +108,15 @@ function der_mat(N::Int)
     return Circulant(c)
 end
 
-function BSplineDeRham_DiffMatrices(N::SArray{Tuple{3}})
-    D1 = der_mat(N[1]) ⊗ circ_id(N[2]) ⊗ circ_id(N[3])
-    D2 = circ_id(N[1]) ⊗ der_mat(N[2]) ⊗ circ_id(N[3])
-    D3 = circ_id(N[1]) ⊗ circ_id(N[2]) ⊗ der_mat(N[3])
+function der_mat(basis::BSplineBasis{periodic})
 
-    G = [D1; D2; D3]
-    C = [zero(D1) -D3 D2;
-        D3  zero(D2) -D1;
-        -D2 D1 zero(D3)]
-    D = [D1 D2 D3]
+    return der_mat(basis.N)
+end
 
-    return G, C, D
+function der_mat(basis::BSplineBasis{dirichlet})
+    D = der_mat(length(basis.B))[2:end, :]
+ 
+    return D
 end
 
 #This way its hard to generalize the notation I think..
@@ -102,17 +125,32 @@ struct discrete_differential{T, N}
     D::SArray{Tuple{N}} #1d diff matrices
 end
 
-function disc_grad(N)
-    return discrete_diff(gradient, N)
+function disc_grad(basis::BSplineBasis{T}) where T
+    return der_mat(basis)
 end
 
-function disc_curl(N)
-    return discrete_diff(curl, N)
+function disc_grad(N::Int) 
+    return der_mat(N)
+end 
+
+function disc_grad(N::Union{NTuple, BSplineTensorProductBasis{D, T}}) where {D, T}
+    return disc_diff(grad, N)
 end
 
-function disc_div(N)
-    return discrete_diff(div, N)
+function disc_curl(N::Union{NTuple, BSplineTensorProductBasis{D, T}}) where {D, T}
+    return disc_diff(curl, N)
 end
+
+function disc_div(N::Union{NTuple, BSplineTensorProductBasis{D, T}}) where {D, T}
+    return disc_diff(div, N)
+end
+
+#1D case
+#function disc_diff(N)
+#    D = der_mat(N)#
+#
+#    return D
+#end
 
 #2D case
 #here we only have gradient and curl in the primal diagram, curl and div in the dual diagram, which we write similarly
@@ -124,15 +162,33 @@ function disc_diff(T, N::NTuple{2})
     return discrete_differential{T, 2}(SVector(D1, D2))
 end
 
-function *(C::discrete_differential{gradient, 2}, fh::SArray)
+function disc_diff(T, basis::BSplineTensorProductBasis{2, ty}) where ty
+    if T == grad
+        N1 = length(basis[1].B)
+        N2 = length(basis[2].B)
+
+        D1 = der_mat(basis[1]) ⊗ circ_id(N2)
+        D2 = circ_id(N1) ⊗ der_mat(basis[2])
+    elseif T == curl
+        N1 = length(basis[1]'.B)
+        N2 = length(basis[2]'.B)
+
+        D1 = der_mat(basis[1]) ⊗ circ_id(N2)
+        D2 = circ_id(N1) ⊗ der_mat(basis[2])
+    end
+
+    return discrete_differential{T, 2}(SVector(D1, D2))
+end
+
+function *(C::discrete_differential{grad, 2}, fh::SArray)
     return SVector(C.D[1] * fh, C.D[2] * fh)
 end
 
 function *(C::discrete_differential{curl, 2}, fh::SArray)
-    return SVector{length(fh[1])}(C.D[1] * fh[2] - C.D[2] * fh[1])
+    return SVector{size(C.D[1])[1]}(C.D[1] * fh[2] - C.D[2] * fh[1])
 end
 
-function matrix(C::discrete_differential{gradient, 2})
+function matrix(C::discrete_differential{grad, 2})
     return [C.D[1];
             C.D[2]]
 end
@@ -141,12 +197,12 @@ function matrix(C::discrete_differential{curl, 2})
     return [-1 .* C.D[2] C.D[1]]
 end
 
-function adjoint(C::discrete_differential{gradient, 2})
+function adjoint(C::discrete_differential{grad, 2})
     return discrete_differential{curl, 2}(SVector(C.D[2]',  -1 .* C.D[1]'))
 end
 
 function adjoint(C::discrete_differential{curl, 2})
-    return discrete_differential{gradient, 2}(SVector( -1 .* C.D[2]', C.D[1]'))
+    return discrete_differential{grad, 2}(SVector( -1 .* C.D[2]', C.D[1]'))
 end
 
 #3D case
@@ -159,7 +215,35 @@ function disc_diff(T, N::NTuple{3})
     return discrete_differential{T, 3}(SVector(D1, D2, D3))
 end
 
-function *(C::discrete_differential{gradient, 3}, fh::SArray)
+##TODO FINISH FOR DIRICHLET 3D
+function disc_diff(T, basis::BSplineTensorProductBasis{3, ty}) where ty
+    if T == grad
+        N1 = length(basis[1].B)
+        N2 = length(basis[2].B)
+        N3 = length(basis[3].B)
+
+        D1 = der_mat(basis[1]) ⊗ (circ_id(N2) ⊗ circ_id(N3))
+        D2 = circ_id(N1) ⊗ (der_mat(basis[2]) ⊗ circ_id(N3))
+        D3 = circ_id(N1) ⊗ (circ_id(N2) ⊗ der_mat(basis[3]))
+    elseif T == curl
+        Nd1 = length(basis[1]'.B)
+        Nd2 = length(basis[2]'.B)
+        Nd3 = length(basis[3]'.B)
+
+        D1 = circ_id(N2) ⊗ der_mat(basis[1]) ⊗ circ_id(N2)
+        D2 = circ_id(N1) ⊗ der_mat(basis[2])
+    elseif T == div
+        N1 = length(basis[1]'.B)
+        N2 = length(basis[2]'.B)
+
+        D1 = der_mat(basis[1]) ⊗ circ_id(N2)
+        D2 = circ_id(N1) ⊗ der_mat(basis[2])
+    end
+
+    return discrete_differential{T, 2}(SVector(D1, D2))
+end
+
+function *(C::discrete_differential{grad, 3}, fh::SArray)
     return SVector(C.D[1] * fh, C.D[2] * fh , C.D[3] * fh)
 end
 
@@ -168,10 +252,10 @@ function *(C::discrete_differential{curl, 3}, fh::SArray{Tuple{3}})
 end
 
 function *(C::discrete_differential{div, 3}, fh::SArray{Tuple{3}})
-    return SVector(C.D[1] * fh[1] + C.D[2] * fh[2] + C.D[3] * fh[3])
+    return SVector{length(fh[1])}(C.D[1] * fh[1] + C.D[2] * fh[2] + C.D[3] * fh[3])
 end
 
-function matrix(C::discrete_differential{gradient, 3})
+function matrix(C::discrete_differential{grad, 3})
     return [C.D[1];
             C.D[2];
             C.D[3]]
@@ -188,7 +272,7 @@ function matrix(C::discrete_differential{div, 3})
 end
 
 #since we don't have a matrix, we have to manually implement the transpose
-function adjoint(C::discrete_differential{gradient, 3})
+function adjoint(C::discrete_differential{grad, 3})
     return discrete_differential{div, 3}(SVector(C.D[1]', C.D[2]', C.D[3]'))
 end
 

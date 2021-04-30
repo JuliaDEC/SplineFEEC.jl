@@ -3,29 +3,44 @@ import Plots: plot
 
 abstract type Basis end
 
-abstract type periodic end # What is the super type, BC?
+abstract type periodic end 
+abstract type dirichlet end
 
+"""
+    BSplineBasis{T}(basis_functions, knot_vector, interval, order, N)
+
+    BSpline basis on `interval` with `N` points and order `k`. Where `T` describes the boundary condition.
+"""
 struct BSplineBasis{T} <: Basis where {T}
-    B #::BT need to define proper type, contains the basis functions
-    t::AbstractVector # the knotvector
+    B #need to define proper type, contains the basis functions
+    t::AbstractVector # knotvector
     interval::AbstractInterval # domain
     k::Int # order
-    N::Int # also equal to length(B), do we need this?, amount of elements
+    N::Int 
 end
 
-getindex(B::BSplineBasis{T}, x::Real, j::Integer) where T = B.B[j](x)
-getindex(B::BSplineBasis{T}, x::Real, j::Colon) where T = [B.B[i](x) for i in 1:length(B.B)]
-getindex(B::BSplineBasis{T}, x::AbstractVector, j::Integer) where T = B.B[j].(x)
-getindex(B::BSplineBasis{T}, x::AbstractVector, j::Colon) where T = [B.B[i](x[j]) for j in 1:length(x), i in 1:length(B.B)]
+function Base.show(io::IO, B::BSplineBasis{T}) where {T}
+    println(io, T, " BSpline basis of order ", B.k, " on interval ", B.interval, " with ", B.N, " nodes.")
+    nothing
+end
 
+getindex(B::BSplineBasis, x::Real, j::Integer) = B.B[j](x)
+getindex(B::BSplineBasis, x::Real, j::Colon) = [B.B[i](x) for i in 1:length(B.B)]
+getindex(B::BSplineBasis, x::AbstractVector, j::Integer) = B.B[j].(x)
+getindex(B::BSplineBasis, x::AbstractVector, j::Colon) = [B.B[i](x[j]) for j in 1:length(x), i in 1:length(B.B)]
 # Calculate the Spline Basis of order k
 # For the Splines, we use CompactBases.jl. For the future, we should write our own libary with a better interface. 
+"""
+    PeriodicBSpline(basis_functions, knot_vector, interval, order, N)
+
+    Construct a `periodic` BSpline basis on `interval` with `N` points and order `k`.
+"""
 function PeriodicBSpline(interval::AbstractInterval, k::Int, N::Int)
     a = interval.left
     b = interval.right
     Δx = (b - a)/N
 
-    # Create a KnotSequence for the cardinal B-Splines
+    # Create a knotsequence for the cardinal B-Splines
     t_ = range(a-k*Δx, b+k*Δx, step=Δx)
     t = ArbitraryKnotSet(k, t_)
     B = BSpline(t)
@@ -56,7 +71,7 @@ function derivative(basis::BSplineBasis{periodic})
     a = interval.left
     b = interval.right
     N = basis.N
-    Δx = (b - a)/N
+    Δx = (b - a)/basis.N
 
     basis_fct = []
     for i in k+2:2*k
@@ -70,10 +85,54 @@ function derivative(basis::BSplineBasis{periodic})
     return BSplineBasis{periodic}(SVector(basis_fct...), basis.t, interval, k, N)
 end
 
-function adjoint(basis::Basis)
+function DirichletBSpline(interval, k::Int, N::Int)
+    a = interval.left
+    b = interval.right
+    Δx = (b - a)/N
+    
+    t = LinearKnotSet(k, a, b, N)
+    B = BSpline(t)
+
+    basis_fct = []
+
+    for i in 1:size(B)[2]
+        push!(basis_fct, x -> B[x, i])
+    end
+
+    return BSplineBasis{dirichlet}(SVector(basis_fct...), t.t, interval, k, N)
+end
+
+function derivative(basis::BSplineBasis{dirichlet})
+
+    interval = basis.interval
+    a = interval.left
+    b = interval.right
+    N = basis.N
+    Δx = (b - a)/basis.N
+
+    k = basis.k-1
+    t_d = LinearKnotSet(k, a, b, N)
+    B_d = BSpline(t_d)
+
+    basis_fct = []
+        
+    for i in 1:size(B_d)[2]
+        push!(basis_fct, x -> k/(t_d[i+k] - t_d[i]) * B_d[x, i])
+    end
+    
+    return BSplineBasis{dirichlet}(SVector(basis_fct...), t_d.t, interval, k, N)
+end
+
+"""
+    adjoint(b::Basis)
+
+    Create a basis that consits of the derivative of basis functions in `b`.
+"""
+function adjoint(basis::BSplineBasis)
     return derivative(basis)
 end
 
+# We can delete this later on
 function plot(basis::Basis)
     a = basis.interval.left
     b = basis.interval.right
@@ -90,8 +149,27 @@ end
 abstract type TensorProductBasis{N} end
 
 # Just collect the 1-D bases as a tuple
+"""
+    BSplineTensorProductBasis{N,T}(Bases::SArray)
+
+    BSpline basis on a tensor-product domain, consisting of a vector of one-dimensional bases defined on each direction of the tensor-product domain.
+    Where `N` describes the dimension and `T` the boundary condition.
+"""
 struct BSplineTensorProductBasis{N, T} <: TensorProductBasis{N}
     B::SArray{Tuple{N}, BSplineBasis{T}}
+end
+
+function Base.show(io::IO, B::BSplineTensorProductBasis{N,T}) where {N,T}
+    domain = B[1].interval
+    for i in 2:N
+        domain = domain × B[i].interval
+    end
+
+    println(io, T, " BSpline basis on tensor-product domain ", domain, ", consisting of: ")
+    for i in 1:N
+        show(io::IO, B.B[i])
+    end
+    nothing
 end
 
 getindex(B::BSplineTensorProductBasis{N, T}, j::Integer) where {N, T} = B.B[j]
@@ -103,6 +181,14 @@ function PeriodicBSplineTensorProductBasis(domain::ProductDomain, k::NTuple{d,In
         push!(basis, PeriodicBSpline(domain.domains[i], k[i], N[i]))
     end
     BSplineTensorProductBasis{d, periodic}(SVector(basis...))
+end
+
+function DirichletBSplineTensorProductBasis(domain::ProductDomain, k::NTuple{d,Int}, N::NTuple{d,Int}) where {d}  
+    basis = []
+    for i in 1:d
+        push!(basis, DirichletBSpline(domain.domains[i], k[i], N[i]))
+    end
+    BSplineTensorProductBasis{d, dirichlet}(SVector(basis...))
 end
 
 function tensorproduct(a::BSplineBasis{T}, b::BSplineBasis{T}) where T
